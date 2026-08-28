@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Generator Wyjazdowy</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<style>
+    body {
+        font-family: system-ui, sans-serif;
+        background: #121212;
+        color: #e0e0e0;
+        padding: 20px;
+        max-width: 1000px;
+        margin: 0 auto;
+    }
+
+    .layout-container {
+        display: flex;
+        flex-direction: column;
+        gap: 30px;
+    }
+
+    @media (min-width: 850px) {
+        .layout-container {
+            display: grid;
+            grid-template-columns: 1fr 300px;
+            align-items: start;
+        }
+    }
+
+    .main-content {
+        max-width: 650px;
+        width: 100%;
+    }
+
+    .sidebar-info {
+        background: #1a1a1a;
+        border: 1px solid #333;
+        border-left: 3px solid #007acc;
+        border-radius: 6px;
+        padding: 16px;
+        font-size: 0.88rem;
+        line-height: 1.5;
+        color: #bbb;
+    }
+
+    .sidebar-info h3 {
+        margin-top: 0;
+        color: #fff;
+        font-size: 1rem;
+        border-bottom: 1px solid #333;
+        padding-bottom: 6px;
+    }
+
+    .sidebar-info p {
+        margin: 0 0 12px 0;
+    }
+
+    .sidebar-info p:last-child {
+        margin-bottom: 0;
+    }
+
+    h1 { font-size: 1.4rem; color: #fff; border-bottom: 2px solid #333; padding-bottom: 8px; margin-top: 0; }
+    label { display: block; margin-top: 15px; font-weight: bold; color: #aaa; }
+    select, input, button { width: 100%; padding: 10px; margin-top: 5px; background: #222; color: #fff; border: 1px solid #444; border-radius: 6px; box-sizing: border-box; }
+    .checkbox-group { display: flex; flex-direction: column; gap: 8px; margin-top: 5px; }
+    .checkbox-group label { font-weight: normal; color: #eee; margin: 0; display: flex; align-items: center; gap: 8px; }
+    .checkbox-group input { width: auto; }
+    button { background: #007acc; color: white; font-weight: bold; margin-top: 20px; border: none; cursor: pointer; }
+    button:hover { background: #005999; }
+    #result { margin-top: 25px; padding: 15px; background: #1e1e1e; border-left: 4px solid #007acc; border-radius: 4px; display: none; }
+    #result h2 { margin-top: 0; color: #4fc3f7; font-size: 1.2rem; }
+    #result ul { padding-left: 20px; margin: 0; }
+    #result li { margin-bottom: 8px; }
+    #map { height: 380px; width: 100%; margin-top: 15px; border-radius: 6px; border: 1px solid #444; }
+
+    .wind-container { background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 15px; margin-top: 8px; text-align: center; }
+    .wind-slider-group { margin-top: 10px; display: flex; gap: 10px; align-items: center; }
+    .wind-slider-group label { margin: 0; font-size: 0.9rem; min-width: 90px; text-align: left; }
+    canvas { background: #121212; border-radius: 50%; cursor: pointer; display: block; margin: 0 auto; }
+
+    .easter-egg { color: #ff5252; font-weight: bold; font-size: 1.1rem; margin-top: 10px; }
+</style>
+</head>
+<body onload="initApp()">
+
+<div class="layout-container">
+    <div class="main-content">
+        <h1>Generator Wyjazdowy</h1>
+
+        <label for="czas">Dostępny czas:</label>
+        <select id="czas" onchange="toggleNocleg()">
+            <option value="1">1 Dzień</option>
+            <option value="2">2 Dni</option>
+        </select>
+
+        <div id="nocleg-box" style="display: none;">
+            <label for="nocleg">Forma noclegu:</label>
+            <select id="nocleg">
+            <option value="W terenie">W terenie</option>
+            <option value="Pod dachem">Pod dachem</option>
+            <option value="random">Dowolny (losowo)</option>
+            </select>
+        </div>
+
+        <label>Wiatr (Kliknij na okręgu zakazany kierunek):</label>
+        <div class="wind-container">
+            <canvas id="windCanvas" width="200" height="200"></canvas>
+            <p id="windStatus" style="font-size: 0.9rem; color: #4fc3f7; margin: 10px 0 0 0;">Brak wykluczenia wiatru (wiej wszędzie)</p>
+
+            <div class="wind-slider-group">
+            <label>Szerokość zakazu: <span id="windSpreadVal">40</span>°</label>
+            <input type="range" id="windSpread" min="10" max="120" step="10" value="40" oninput="updateWindSpread(this.value)">
+            </div>
+        </div>
+
+        <label for="distRange">Maksymalny zasięg / odległość: <span id="distVal" style="color:#4fc3f7">100</span> km</label>
+        <input type="range" id="distRange" min="20" max="550" step="10" value="100" oninput="document.getElementById('distVal').innerText = this.value">
+
+        <label>Co dzisiaj wchodzi w grę?</label>
+        <div class="checkbox-group">
+            <label><input type="checkbox" id="aktyw-rower-dom" checked> Rower z domu</label>
+            <label><input type="checkbox" id="aktyw-rower-pociag" checked> Rower + pociąg</label>
+            <label><input type="checkbox" id="aktyw-marsz" checked> Marsz w terenie</label>
+            <label><input type="checkbox" id="aktyw-marsz-pociag" checked> Marsz + pociąg</label>
+            <label><input type="checkbox" id="aktyw-city" checked> City Break</label>
+        </div>
+
+        <button onclick="generuj()">LOSUJ DECYZJĘ I MAPĘ</button>
+
+        <div id="result">
+            <h2 id="res-title"></h2>
+            <p id="res-egg" class="easter-egg" style="display:none;"></p>
+            <ul id="res-list">
+            <li id="res-charakter" style="display:none;"></li>
+            <li id="res-zasieg"></li>
+            <li id="res-nocleg" style="display:none;"></li>
+            </ul>
+            <div id="map"></div>
+        </div>
+    </div>
+
+    <div class="sidebar-info">
+        <h3>Jak tego używać?</h3>
+        <p>Po wybraniu wszystkich parametrów, na mapie zobaczysz zielony okrąg. Przy projektowaniu trasy w swoim ulubionym planerze, poszukaj punktu startowego, który by się w tym okręgu mieścił. Jeśli się nie da – to maksymalnie blisko.</p>
+        <p>Ten skrypt ma z Ciebie zdjąć ciężar wyboru kierunku i rodzaju aktywności – nie ma tu gotowych odpowiedzi, a pewnych rzeczy trzeba się domyślić, być może coś pod siebie zmienić w kodzie, ale to już nie jest mój problem. Nie tylko „u mnie działa”, ale przede wszystkim „dla mnie działa”.</p>
+        <p>Błędy możesz zgłaszać gdzie chcesz – najszybciej rozpatrzy je Sąd Ostateczny.</p>
+    </div>
+</div>
+
+<script>
+    const DOM_LAT = 53.0138;
+    const DOM_LON = 18.5984;
+
+    const BAZA_CHARAKTERU = {
+    "Rower": [
+        "Szybki asfalt",
+        "Lekki gravel",
+        "Wzdłuż rzeki",
+        "Szukaj jezior",
+        "Gravel z duszą MTB",
+        "Odkryte pola",
+        "Znane obiekty",
+        "Wariant widokowy",
+        "Złap szlak",
+        "GÓRKI!!!"
+    ],
+    "Marsz": [
+        "Las",
+        "Woda",
+        "Pola",
+        "Szlak turystyczny",
+        "Górki",
+    ]
+    };
+
+    let windActive = false;
+    let windAngle = 0;
+    let windSpread = 40;
+    let clickCount = 0;
+
+    const canvas = document.getElementById('windCanvas');
+    const ctx = canvas.getContext('2d');
+
+    function initApp() {
+        toggleNocleg();
+        drawWindCompass();
+        document.getElementById('distVal').innerText = document.getElementById('distRange').value;
+    }
+
+    function drawWindCompass() {
+    ctx.clearRect(0, 0, 200, 200);
+    const cx = 100, cy = 100, r = 80;
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, 2 * Math.PI);
+    ctx.fillStyle = "#222";
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = "#444";
+    ctx.stroke();
+
+    for (let i = 0; i < 360; i += 30) {
+        let rad = (i - 90) * Math.PI / 180;
+        let x1 = cx + (r - 8) * Math.cos(rad);
+        let y1 = cy + (r - 8) * Math.sin(rad);
+        let x2 = cx + r * Math.cos(rad);
+        let y2 = cy + r * Math.sin(rad);
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.strokeStyle = "#666";
+        ctx.stroke();
+    }
+
+    ctx.fillStyle = "#aaa";
+    ctx.font = "11px system-ui";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("N", cx, cy - r + 15);
+    ctx.fillText("E", cx + r - 15, cy);
+    ctx.fillText("S", cx, cy + r - 15);
+    ctx.fillText("W", cx - r + 15, cy);
+
+    if (windActive) {
+        let startAngle = (windAngle - windSpread - 90) * Math.PI / 180;
+        let endAngle = (windAngle + windSpread - 90) * Math.PI / 180;
+
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, r, startAngle, endAngle);
+        ctx.closePath();
+        ctx.fillStyle = "rgba(200, 40, 40, 0.4)";
+        ctx.fill();
+        ctx.strokeStyle = "#ff4444";
+        ctx.stroke();
+    }
+    }
+
+    canvas.addEventListener('click', function(e) {
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left - 100;
+    const y = e.clientY - rect.top - 100;
+
+    let rad = Math.atan2(y, x);
+    let deg = rad * 180 / Math.PI + 90;
+    if (deg < 0) deg += 360;
+
+    windAngle = Math.round(deg);
+    windActive = true;
+    drawWindCompass();
+    document.getElementById('windStatus').innerText = `Wiatr z: ${windAngle}° (strefa ±${windSpread}° wykluczona)`;
+    });
+
+    function updateWindSpread(val) {
+    windSpread = parseInt(val);
+    document.getElementById('windSpreadVal').innerText = val;
+    if (windActive) drawWindCompass();
+    }
+
+    function toggleNocleg() {
+    const czas = document.getElementById('czas').value;
+    document.getElementById('nocleg-box').style.display = (czas === "2") ? "block" : "none";
+    }
+
+    function getRandom(arr) {
+    return arr[Math.floor(Math.random() * arr.length)];
+    }
+
+    function calculateDestination(lat, lon, brng, distKm) {
+    const R = 6371;
+    const rad = Math.PI / 180;
+    const lat1 = lat * rad;
+    const lon1 = lon * rad;
+    const brngRad = brng * rad;
+    const d = distKm / R;
+
+    const lat2 = Math.asin(Math.sin(lat1) * Math.cos(d) + Math.cos(lat1) * Math.sin(d) * Math.cos(brngRad));
+    const lon2 = lon1 + Math.atan2(Math.sin(brngRad) * Math.sin(d) * Math.cos(lat1), Math.cos(d) - Math.sin(lat1) * Math.sin(lat2));
+
+    return [lat2 / rad, lon2 / rad];
+    }
+
+    let map = null;
+    let mapElements = [];
+
+    function initMap(centerLat, centerLon, targetLat, targetLon) {
+    if (!map) {
+        map = L.map('map').setView([centerLat, centerLon], 7);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        maxZoom: 18,
+        attribution: '© OpenStreetMap © CARTO'
+        }).addTo(map);
+    } else {
+        mapElements.forEach(el => map.removeLayer(el));
+        mapElements = [];
+    }
+
+    const homeMarker = L.marker([centerLat, centerLon]).addTo(map).bindPopup("Start (Dom)");
+    mapElements.push(homeMarker);
+
+    const polyline = L.polyline([[centerLat, centerLon], [targetLat, targetLon]], {color: '#007acc', weight: 2, dashArray: '5, 8'}).addTo(map);
+    mapElements.push(polyline);
+
+    const circle = L.circle([targetLat, targetLon], {
+        color: '#28a745',
+        fillColor: '#28a745',
+        fillOpacity: 0.25,
+        radius: 25000
+    }).addTo(map).bindPopup("Strefa celu (r = 25 km)");
+    mapElements.push(circle);
+
+    const group = new L.featureGroup([homeMarker, circle]);
+    map.fitBounds(group.getBounds().pad(0.1));
+    }
+
+    function generuj() {
+    clickCount++;
+
+    const resTitle = document.getElementById('res-title');
+    const resEgg = document.getElementById('res-egg');
+    const resList = document.getElementById('res-list');
+    const mapDiv = document.getElementById('map');
+
+    if (clickCount === 3) {
+        resTitle.innerText = "UWAGA!";
+        resEgg.innerText = "Nie miałeś klikać, tylko coś robić – po to to jest!";
+        resEgg.style.display = "block";
+        resList.style.display = "none";
+        mapDiv.style.display = "none";
+        document.getElementById('result').style.display = "block";
+        return;
+    }
+
+    resEgg.style.display = "none";
+    resList.style.display = "block";
+    mapDiv.style.display = "block";
+
+    const czas = document.getElementById('czas').value;
+    const dwaDni = (czas === "2");
+
+    let rawDist = parseFloat(document.getElementById('distRange').value) || 100;
+
+    let aktyw = [];
+    if (document.getElementById('aktyw-rower-dom').checked) aktyw.push("Rower z domu");
+    if (document.getElementById('aktyw-rower-pociag').checked) aktyw.push("Rower + pociąg");
+    if (document.getElementById('aktyw-marsz').checked) aktyw.push("Marsz w terenie");
+    if (document.getElementById('aktyw-marsz-pociag').checked) aktyw.push("Marsz + pociąg");
+    if (document.getElementById('aktyw-city').checked) aktyw.push("City Break");
+
+    if (aktyw.length === 0) aktyw = ["Rower z domu", "Rower + pociąg", "Marsz w terenie", "Marsz + pociąg", "City Break"];
+
+    let wygrana = getRandom(aktyw);
+    let finalDist = rawDist;
+
+    if (wygrana === "Rower z domu" && rawDist > 200) {
+        finalDist = 200;
+    } else if (wygrana === "Marsz w terenie") {
+        finalDist = Math.min(rawDist, 35);
+    }
+
+    let validAngleFound = false;
+    let chosenAzimuth = 0;
+    let attempts = 0;
+
+    while (!validAngleFound && attempts < 500) {
+        chosenAzimuth = Math.floor(Math.random() * 360);
+        attempts++;
+
+        if (!windActive) {
+        validAngleFound = true;
+        } else {
+        let diff = Math.abs(chosenAzimuth - windAngle);
+        if (diff > 180) diff = 360 - diff;
+        if (diff > windSpread) validAngleFound = true;
+        }
+
+        if (validAngleFound) {
+        let isNorth = (chosenAzimuth >= 335 || chosenAzimuth <= 35);
+        if (isNorth && finalDist > 160) {
+            validAngleFound = false;
+        }
+        }
+    }
+
+    resTitle.innerText = `WYGRANA OPCJA: ${wygrana.toUpperCase()}`;
+
+    const resCharakter = document.getElementById('res-charakter');
+    if (wygrana.includes("Rower")) {
+        resCharakter.innerText = `Charakter trasy: ${getRandom(BAZA_CHARAKTERU["Rower"])}`;
+        resCharakter.style.display = "list-item";
+    } else if (wygrana.includes("Marsz")) {
+        resCharakter.innerText = `Charakter trasy: ${getRandom(BAZA_CHARAKTERU["Marsz"])}`;
+        resCharakter.style.display = "list-item";
+    } else {
+        resCharakter.style.display = "none";
+    }
+
+    document.getElementById('res-zasieg').innerText = `Dystans od domu: ~${finalDist} km`;
+
+    const resNocleg = document.getElementById('res-nocleg');
+    if (dwaDni) {
+        let n = document.getElementById('nocleg').value;
+        if (n === "random") n = getRandom(["W terenie", "Pod dachem"]);
+        resNocleg.innerText = `Forma noclegu: ${n}`;
+        resNocleg.style.display = "list-item";
+    } else {
+        resNocleg.style.display = "none";
+    }
+
+    document.getElementById('result').style.display = "block";
+
+    const targetCoords = calculateDestination(DOM_LAT, DOM_LON, chosenAzimuth, finalDist);
+
+    setTimeout(() => {
+        initMap(DOM_LAT, DOM_LON, targetCoords[0], targetCoords[1]);
+    }, 100);
+    }
+</script>
+</body>
+</html>
