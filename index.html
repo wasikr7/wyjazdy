@@ -9,15 +9,15 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <style>
-    body {
-        font-family: system-ui, sans-serif;
-        background: #121212;
-        color: #e0e0e0;
-        padding: 20px;
-        max-width: 1000px;
-        margin: 0 auto;
+    body { 
+        font-family: system-ui, sans-serif; 
+        background: #121212; 
+        color: #e0e0e0; 
+        padding: 20px; 
+        max-width: 1000px; 
+        margin: 0 auto; 
     }
-
+    
     .layout-container {
         display: flex;
         flex-direction: column;
@@ -81,7 +81,9 @@
     .wind-container { background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 15px; margin-top: 8px; text-align: center; }
     .wind-slider-group { margin-top: 10px; display: flex; gap: 10px; align-items: center; }
     .wind-slider-group label { margin: 0; font-size: 0.9rem; min-width: 90px; text-align: left; }
-    canvas { background: #121212; border-radius: 50%; cursor: pointer; display: block; margin: 0 auto; }
+    
+    /* touch-action: none zapobiega przypadkowemu przewijaniu strony podczas dotykania tarczy */
+    canvas { background: #121212; border-radius: 50%; cursor: pointer; display: block; margin: 0 auto; touch-action: none; }
 
     .easter-egg { color: #ff5252; font-weight: bold; font-size: 1.1rem; margin-top: 10px; }
 </style>
@@ -241,20 +243,31 @@
     }
     }
 
-    canvas.addEventListener('click', function(e) {
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left - 100;
-    const y = e.clientY - rect.top - 100;
+    // Uniwersalna funkcja przeliczająca pozycję dla kliknięcia i dotyku
+    function handleWindInput(e) {
+        const rect = canvas.getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
 
-    let rad = Math.atan2(y, x);
-    let deg = rad * 180 / Math.PI + 90;
-    if (deg < 0) deg += 360;
+        const x = clientX - rect.left - 100;
+        const y = clientY - rect.top - 100;
 
-    windAngle = Math.round(deg);
-    windActive = true;
-    drawWindCompass();
-    document.getElementById('windStatus').innerText = `Wiatr z: ${windAngle}° (strefa ±${windSpread}° wykluczona)`;
-    });
+        let rad = Math.atan2(y, x);
+        let deg = rad * 180 / Math.PI + 90;
+        if (deg < 0) deg += 360;
+
+        windAngle = Math.round(deg);
+        windActive = true;
+        drawWindCompass();
+        document.getElementById('windStatus').innerText = `Wiatr z: ${windAngle}° (strefa ±${windSpread}° wykluczona)`;
+    }
+
+    // Nasłuchiwanie myszy i ekranu dotykowego
+    canvas.addEventListener('click', handleWindInput);
+    canvas.addEventListener('touchstart', function(e) {
+        e.preventDefault();
+        handleWindInput(e);
+    }, { passive: false });
 
     function updateWindSpread(val) {
     windSpread = parseInt(val);
@@ -316,6 +329,9 @@
 
     const group = new L.featureGroup([homeMarker, circle]);
     map.fitBounds(group.getBounds().pad(0.1));
+    
+    // Przeliczenie wymiarów Leaflet na wypadek załadowania w ukrytym wcześniej kontenerze div
+    map.invalidateSize();
     }
 
     function generuj() {
@@ -418,7 +434,7 @@
 
     setTimeout(() => {
         initMap(DOM_LAT, DOM_LON, targetCoords[0], targetCoords[1]);
-    }, 100);
+    }, 150);
     }
 </script>
 </body>
